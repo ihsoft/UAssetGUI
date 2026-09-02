@@ -650,8 +650,44 @@ namespace UAssetGUI
         }
 
         public DateTime LastLoadTimestamp = DateTime.UtcNow;
+        public AssetOpenStressResult LastAssetOpenStressResult { get; private set; }
+
+        internal void PrepareForAssetOpenStressTest(EngineVersion engineVersion, Usmap mappings)
+        {
+            if (!Program.IsAssetOpenStressTest) throw new InvalidOperationException("Asset-open stress mode is not active.");
+            ParsingVersion = engineVersion;
+            ParsingMappings = mappings;
+        }
+
+        internal AssetOpenStressResult LoadFileForAssetOpenStressTest(string filePath, FileContainerForm parentContainerForm)
+        {
+            if (!Program.IsAssetOpenStressTest) throw new InvalidOperationException("Asset-open stress mode is not active.");
+            LoadFileAtInternal(filePath, parentContainerForm);
+            return LastAssetOpenStressResult ?? throw new InvalidOperationException("The asset-open stress result was not produced.");
+        }
+
+        private void ShowAssetLoadMessage(string message)
+        {
+            if (Program.IsAssetOpenStressTest)
+            {
+                LastAssetOpenStressResult?.Notices.Add(message);
+                return;
+            }
+            MessageBox.Show(message, DisplayVersion);
+        }
+
         private void LoadFileAtInternal(string filePath, FileContainerForm parentContainerForm = null)
         {
+            Stopwatch stressTimer = null;
+            if (Program.IsAssetOpenStressTest)
+            {
+                LastAssetOpenStressResult = new AssetOpenStressResult
+                {
+                    ExtractedPath = filePath
+                };
+                stressTimer = Stopwatch.StartNew();
+            }
+
             dataGridView1.Visible = true;
             byteView1.Visible = false;
             jsonView.Visible = false;
@@ -687,7 +723,7 @@ namespace UAssetGUI
                         {
                             if (ex?.Message != null && ex.Message.Contains("Cannot deserialize the current JSON array")) // OK because Newtonsoft.Json does not translate exceptions
                             {
-                                UAGUtils.InvokeUI(() => { MessageBox.Show(UAGConfig.GetString("Error.AttemptToOpenCUE4ParseJSON"), DisplayVersion); });
+                                ShowAssetLoadMessage(UAGConfig.GetString("Error.AttemptToOpenCUE4ParseJSON"));
                                 return;
                             }
                             else
@@ -712,7 +748,8 @@ namespace UAssetGUI
                         }
                         catch (FileNotFoundException ex)
                         {
-                            MessageBox.Show(string.Format(UAGConfig.GetString("Error.Generic"), ex.Message), DisplayVersion);
+                            if (Program.IsAssetOpenStressTest) throw;
+                            ShowAssetLoadMessage(string.Format(UAGConfig.GetString("Error.Generic"), ex.Message));
                             return;
                         }
 
@@ -747,12 +784,14 @@ namespace UAssetGUI
                             // check if accidentally opened .uexp
                             else if (Path.GetExtension(filePath) == ".uexp")
                             {
-                                MessageBox.Show(UAGConfig.GetString("Error.AttemptToOpenUEXP"), DisplayVersion);
+                                if (Program.IsAssetOpenStressTest) throw new InvalidDataException("The hierarchy click resolved to a .uexp companion instead of the asset header.");
+                                ShowAssetLoadMessage(UAGConfig.GetString("Error.AttemptToOpenUEXP"));
                             }
                             // check if Zen asset for custom popup
                             // this definitely has potential for false positives, but it will still filter out basically any other file type, if it mattered that much i'd just actually parse the thing
                             else if (Path.GetExtension(filePath) == ".uasset" && (sig == 0 || sig == 1) && nextFourBytes > 40 && nextFourBytes < 1e9) // IsUnversioned reasonable, HeaderSize reasonable
                             {
+                                if (Program.IsAssetOpenStressTest) throw new InvalidDataException("retoc produced an unconverted UE5 Zen asset.");
                                 DialogResult messageBoxRes = MessageBox.Show(UAGConfig.GetString("Error.AttemptToOpenZenUE5"), DisplayVersion, MessageBoxButtons.YesNo);
                                 switch (messageBoxRes)
                                 {
@@ -765,6 +804,7 @@ namespace UAssetGUI
                             }
                             else if (Path.GetExtension(filePath) == ".uasset" && nextFourBytes == 0 && ue4CookedHeaderSize > 40 && ue4CookedHeaderSize < 1e9) // zero FName, CookedHeaderSize reasonable
                             {
+                                if (Program.IsAssetOpenStressTest) throw new InvalidDataException("retoc produced an unconverted UE4 Zen asset.");
                                 DialogResult messageBoxRes = MessageBox.Show(UAGConfig.GetString("Error.AttemptToOpenZenUE4"), DisplayVersion, MessageBoxButtons.YesNo);
                                 switch (messageBoxRes)
                                 {
@@ -777,7 +817,8 @@ namespace UAssetGUI
                             }
                             else
                             {
-                                MessageBox.Show(UAGConfig.GetString("Error.AttemptToOpenUnknown"), DisplayVersion);
+                                if (Program.IsAssetOpenStressTest) throw new InvalidDataException("The extracted hierarchy asset has an unknown file signature.");
+                                ShowAssetLoadMessage(UAGConfig.GetString("Error.AttemptToOpenUnknown"));
                             }
                             return;
                         }
@@ -892,6 +933,25 @@ namespace UAssetGUI
 
                 bool failedToMaintainBinaryEquality = !string.IsNullOrEmpty(tableEditor.asset.FilePath) && !tableEditor.asset.FilePath.EndsWith(".json") && !tableEditor.asset.VerifyBinaryEquality();
 
+                if (Program.IsAssetOpenStressTest)
+                {
+                    LastAssetOpenStressResult.Loaded = true;
+                    LastAssetOpenStressResult.BinaryEqualityVerified = !failedToMaintainBinaryEquality;
+                    LastAssetOpenStressResult.HasUnversionedProperties = tableEditor.asset.HasUnversionedProperties;
+                    LastAssetOpenStressResult.HadMappings = tableEditor.asset.Mappings != null;
+                    LastAssetOpenStressResult.HasDuplicateNameMapEntries = hasDuplicates;
+                    LastAssetOpenStressResult.ExportCount = tableEditor.asset.Exports.Count;
+                    LastAssetOpenStressResult.RawExportCount = failedCategoryCount;
+                    LastAssetOpenStressResult.RawStructCount = numRawStructs;
+                    LastAssetOpenStressResult.UnknownTypes = unknownTypes.OrderBy(value => value, StringComparer.Ordinal).ToArray();
+                    LastAssetOpenStressResult.RawStructTypes = rawStructTypes.OrderBy(value => value, StringComparer.Ordinal).ToArray();
+                    LastAssetOpenStressResult.FailedDependencies = tableEditor.asset.OtherAssetsFailedToAccess?
+                        .Where(value => value != null)
+                        .Select(value => value.ToString())
+                        .OrderBy(value => value, StringComparer.Ordinal)
+                        .ToArray() ?? Array.Empty<string>();
+                }
+
 #if DEBUGTRACING
                 if (TracingEnabled && jsonTracingPath != null)
                 {
@@ -933,43 +993,43 @@ namespace UAssetGUI
 
                 if (didACE7Decrypt)
                 {
-                    MessageBox.Show(UAGConfig.GetString("Notice.ACE7"), DisplayVersion);
+                    ShowAssetLoadMessage(UAGConfig.GetString("Notice.ACE7"));
                 }
 
                 if (failedCategoryCount > 0)
                 {
-                    MessageBox.Show(string.Format(UAGConfig.GetString("Notice.FailedExports"), failedCategoryCount), DisplayVersion);
+                    ShowAssetLoadMessage(string.Format(UAGConfig.GetString("Notice.FailedExports"), failedCategoryCount));
                 }
 
                 if (hasDuplicates)
                 {
-                    MessageBox.Show(UAGConfig.GetString("Notice.DuplicateNameMapEntries"), DisplayVersion);
+                    ShowAssetLoadMessage(UAGConfig.GetString("Notice.DuplicateNameMapEntries"));
                 }
 
                 if (unknownTypes.Count > 0)
                 {
-                    MessageBox.Show(failedToMaintainBinaryEquality ? string.Format(UAGConfig.GetString("Notice.UnknownTypesNotOK"), unknownTypes.Count, string.Join(", ", unknownTypes)) : string.Format(UAGConfig.GetString("Notice.UnknownTypesOK"), unknownTypes.Count, string.Join(", ", unknownTypes)), DisplayVersion);
+                    ShowAssetLoadMessage(failedToMaintainBinaryEquality ? string.Format(UAGConfig.GetString("Notice.UnknownTypesNotOK"), unknownTypes.Count, string.Join(", ", unknownTypes)) : string.Format(UAGConfig.GetString("Notice.UnknownTypesOK"), unknownTypes.Count, string.Join(", ", unknownTypes)));
                 }
 
                 if (rawStructTypes.Count > 0)
                 {
-                    MessageBox.Show(failedToMaintainBinaryEquality ? string.Format(UAGConfig.GetString("Notice.RawStructTypesNotOK"), numRawStructs, string.Join(", ", rawStructTypes)) : string.Format(UAGConfig.GetString("Notice.RawStructTypesOK"), numRawStructs, string.Join(", ", rawStructTypes)), DisplayVersion);
+                    ShowAssetLoadMessage(failedToMaintainBinaryEquality ? string.Format(UAGConfig.GetString("Notice.RawStructTypesNotOK"), numRawStructs, string.Join(", ", rawStructTypes)) : string.Format(UAGConfig.GetString("Notice.RawStructTypesOK"), numRawStructs, string.Join(", ", rawStructTypes)));
                 }
 
                 if (tableEditor.asset.HasUnversionedProperties && tableEditor.asset.Mappings == null)
                 {
-                    MessageBox.Show(UAGConfig.GetString("Notice.UnversionedButNoMappings"), DisplayVersion);
+                    ShowAssetLoadMessage(UAGConfig.GetString("Notice.UnversionedButNoMappings"));
                 }
 
                 if (failedToMaintainBinaryEquality)
                 {
-                    MessageBox.Show(UAGConfig.GetString("Notice.BinaryEquality"), DisplayVersion);
+                    ShowAssetLoadMessage(UAGConfig.GetString("Notice.BinaryEquality"));
                 }
 
                 if (tableEditor.asset.HasUnversionedProperties && (failedCategoryCount > 0 || failedToMaintainBinaryEquality) && (tableEditor.asset.OtherAssetsFailedToAccess?.Count ?? 0) > 0)
                 {
                     string formattedListOfFailedToAccessAssets = string.Join("\n", tableEditor.asset.OtherAssetsFailedToAccess);
-                    MessageBox.Show(string.Format(UAGConfig.GetString("Notice.FailedToAccessOtherAssets"), formattedListOfFailedToAccessAssets), DisplayVersion);
+                    ShowAssetLoadMessage(string.Format(UAGConfig.GetString("Notice.FailedToAccessOtherAssets"), formattedListOfFailedToAccessAssets));
                 }
 
                 if (!tableEditor.asset.IsUnversioned)
@@ -981,6 +1041,13 @@ namespace UAssetGUI
             }
             catch (Exception ex)
             {
+                if (Program.IsAssetOpenStressTest)
+                {
+                    LastAssetOpenStressResult.ExceptionType = ex.GetType().FullName;
+                    LastAssetOpenStressResult.ExceptionMessage = ex.Message;
+                    LastAssetOpenStressResult.ExceptionStackTrace = ex.StackTrace;
+                }
+
                 string formattedListOfFailedToAccessAssets = null;
                 if (tableEditor?.asset != null && tableEditor.asset.HasUnversionedProperties && (tableEditor.asset.OtherAssetsFailedToAccess?.Count ?? 0) > 0)
                 {
@@ -1004,26 +1071,32 @@ namespace UAssetGUI
                 switch (ex)
                 {
                     case IOException _:
-                        MessageBox.Show(UAGConfig.GetString("Error.BadEngineVersion"), DisplayVersion);
+                        ShowAssetLoadMessage(UAGConfig.GetString("Error.BadEngineVersion"));
                         break;
                     case FormatException formatEx:
-                        MessageBox.Show(string.Format(UAGConfig.GetString("Error.Generic"), "\n" + formatEx.GetType() + ": " + formatEx.Message), DisplayVersion);
+                        ShowAssetLoadMessage(string.Format(UAGConfig.GetString("Error.Generic"), "\n" + formatEx.GetType() + ": " + formatEx.Message));
                         break;
                     case UnknownEngineVersionException _:
-                        MessageBox.Show(UAGConfig.GetString("Error.NoEngineVersion"), DisplayVersion);
+                        ShowAssetLoadMessage(UAGConfig.GetString("Error.NoEngineVersion"));
                         break;
                     default:
-                        MessageBox.Show(string.Format(UAGConfig.GetString("Error.Generic"), "\n" + ex.GetType() + ": " + ex.Message), DisplayVersion);
+                        ShowAssetLoadMessage(string.Format(UAGConfig.GetString("Error.Generic"), "\n" + ex.GetType() + ": " + ex.Message));
                         break;
                 }
 
                 if (formattedListOfFailedToAccessAssets != null)
                 {
-                    MessageBox.Show(string.Format(UAGConfig.GetString("Notice.FailedToAccessOtherAssets"), formattedListOfFailedToAccessAssets), DisplayVersion);
+                    ShowAssetLoadMessage(string.Format(UAGConfig.GetString("Notice.FailedToAccessOtherAssets"), formattedListOfFailedToAccessAssets));
                 }
             }
             finally
             {
+                if (Program.IsAssetOpenStressTest)
+                {
+                    stressTimer?.Stop();
+                    LastAssetOpenStressResult.LoadMilliseconds = stressTimer?.Elapsed.TotalMilliseconds ?? 0;
+                    LastAssetOpenStressResult.FinishStatus();
+                }
                 LastLoadTimestamp = DateTime.UtcNow;
                 UpdateRPC();
 
@@ -2327,6 +2400,7 @@ namespace UAssetGUI
         private RichPresence rp;
         public void UpdateRPC()
         {
+            if (Program.IsAssetOpenStressTest) return;
             if (DiscordRPC == null || !DiscordRPC.IsInitialized || DiscordRPC.IsDisposed) return;
             if (!UAGConfig.Data.EnableDiscordRPC) return;
 

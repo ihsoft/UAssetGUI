@@ -81,6 +81,7 @@ namespace UAssetGUI
         internal static bool DidResetEverythingThisStartup = false;
         internal static string DidResetEverythingThisStartupErrorMessage = null;
         internal static string OverrideLangCode = null;
+        internal static bool IsAssetOpenStressTest = false;
 
         /// <summary>
         /// The main entry point for the application.
@@ -266,6 +267,13 @@ namespace UAssetGUI
                     {
                         Clipboard.SetText(ex.ToString());
                     }
+                }
+
+                if (args.Count >= 2 && args[1].Equals("stress-open", StringComparison.OrdinalIgnoreCase))
+                {
+                    IsAssetOpenStressTest = true;
+                    Environment.ExitCode = AssetOpenStressRunner.Run(args.Skip(2).ToArray());
+                    return;
                 }
 
                 Form1 f1 = new Form1

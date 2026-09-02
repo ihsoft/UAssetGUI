@@ -458,6 +458,10 @@ namespace UAssetGUI
             }
             catch (Exception ex)
             {
+                if (Program.IsAssetOpenStressTest)
+                {
+                    throw new InvalidOperationException("Failed to launch the embedded retoc executable.", ex);
+                }
                 UAGUtils.InvokeUI(() =>
                 {
                     MessageBox.Show(string.Format(UAGConfig.GetString("FileContainerForm.Error.LaunchRetoc"), ex.Message + "\n" + ex.StackTrace), BaseForm.DisplayVersion);
@@ -467,6 +471,10 @@ namespace UAssetGUI
 
             if (!retocAvailable)
             {
+                if (Program.IsAssetOpenStressTest)
+                {
+                    throw new InvalidOperationException("The embedded retoc executable is unavailable. " + outputText + " " + errorText);
+                }
                 UAGUtils.InvokeUI(() =>
                 {
                     MessageBox.Show(string.Format(UAGConfig.GetString("FileContainerForm.Error.LaunchRetoc"), outputText + "\n" + errorText), BaseForm.DisplayVersion);
@@ -517,6 +525,11 @@ namespace UAssetGUI
             }
             catch (Exception ex)
             {
+                if (Program.IsAssetOpenStressTest)
+                {
+                    UnloadContainer();
+                    throw;
+                }
                 UAGUtils.InvokeUI(() =>
                 {
                     MessageBox.Show(string.Format(UAGConfig.GetString("Error.Generic"), ex.Message), BaseForm.DisplayVersion);
