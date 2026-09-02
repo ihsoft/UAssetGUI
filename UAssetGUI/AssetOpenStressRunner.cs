@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
+using UAssetAPI;
+using UAssetAPI.ExportTypes;
 using UAssetAPI.UnrealTypes;
 using UAssetAPI.Unversioned;
 
@@ -18,15 +20,20 @@ namespace UAssetGUI
         public string Status { get; set; } = "failed";
         public bool Loaded { get; set; }
         public bool? BinaryEqualityVerified { get; set; }
+        public BinaryEqualityFailure BinaryEqualityFailure { get; set; }
         public bool HasUnversionedProperties { get; set; }
         public bool HadMappings { get; set; }
         public bool HasDuplicateNameMapEntries { get; set; }
         public int ExportCount { get; set; }
         public int RawExportCount { get; set; }
+        public int CustomSerializedExportCount { get; set; }
+        public string[] CustomSerializedExportTypes { get; set; } = Array.Empty<string>();
         public int RawStructCount { get; set; }
         public string[] UnknownTypes { get; set; } = Array.Empty<string>();
         public string[] RawStructTypes { get; set; } = Array.Empty<string>();
         public string[] FailedDependencies { get; set; } = Array.Empty<string>();
+        public string[] MissingEnumMappings { get; set; } = Array.Empty<string>();
+        public ExportParseFailure[] ExportParseFailures { get; set; } = Array.Empty<ExportParseFailure>();
         public List<string> Notices { get; set; } = new List<string>();
         public string ExceptionType { get; set; }
         public string ExceptionMessage { get; set; }
@@ -43,8 +50,8 @@ namespace UAssetGUI
                 return;
             }
 
-            Status = Notices.Count > 0 || UnknownTypes.Length > 0 || RawStructTypes.Length > 0 ||
-                FailedDependencies.Length > 0 || HasDuplicateNameMapEntries ? "notice" : "ok";
+            Status = Notices.Count > 0 || CustomSerializedExportCount > 0 || UnknownTypes.Length > 0 || RawStructTypes.Length > 0 ||
+                FailedDependencies.Length > 0 || MissingEnumMappings.Length > 0 || HasDuplicateNameMapEntries ? "notice" : "ok";
         }
     }
 

@@ -919,12 +919,19 @@ namespace UAssetGUI
                 nameMapRefs = null;
 
                 int failedCategoryCount = 0;
+                int customSerializedExportCount = 0;
+                var customSerializedExportTypes = new HashSet<string>(StringComparer.Ordinal);
                 unknownTypes = new HashSet<string>();
                 rawStructTypes = new HashSet<string>();
                 numRawStructs = 0;
                 foreach (Export cat in tableEditor.asset.Exports)
                 {
-                    if (cat is RawExport) failedCategoryCount++;
+                    if (cat is CustomSerializedExport)
+                    {
+                        customSerializedExportCount++;
+                        customSerializedExportTypes.Add(cat.GetExportClassType().Value.Value);
+                    }
+                    else if (cat is RawExport) failedCategoryCount++;
                     if (cat is NormalExport usNormal)
                     {
                         foreach (PropertyData dat in usNormal.Data) GetUnknownProperties(dat);
@@ -937,11 +944,16 @@ namespace UAssetGUI
                 {
                     LastAssetOpenStressResult.Loaded = true;
                     LastAssetOpenStressResult.BinaryEqualityVerified = !failedToMaintainBinaryEquality;
+                    LastAssetOpenStressResult.BinaryEqualityFailure = tableEditor.asset.LastBinaryEqualityFailure;
                     LastAssetOpenStressResult.HasUnversionedProperties = tableEditor.asset.HasUnversionedProperties;
                     LastAssetOpenStressResult.HadMappings = tableEditor.asset.Mappings != null;
                     LastAssetOpenStressResult.HasDuplicateNameMapEntries = hasDuplicates;
                     LastAssetOpenStressResult.ExportCount = tableEditor.asset.Exports.Count;
                     LastAssetOpenStressResult.RawExportCount = failedCategoryCount;
+                    LastAssetOpenStressResult.CustomSerializedExportCount = customSerializedExportCount;
+                    LastAssetOpenStressResult.CustomSerializedExportTypes = customSerializedExportTypes
+                        .OrderBy(value => value, StringComparer.Ordinal)
+                        .ToArray();
                     LastAssetOpenStressResult.RawStructCount = numRawStructs;
                     LastAssetOpenStressResult.UnknownTypes = unknownTypes.OrderBy(value => value, StringComparer.Ordinal).ToArray();
                     LastAssetOpenStressResult.RawStructTypes = rawStructTypes.OrderBy(value => value, StringComparer.Ordinal).ToArray();
@@ -950,6 +962,10 @@ namespace UAssetGUI
                         .Select(value => value.ToString())
                         .OrderBy(value => value, StringComparer.Ordinal)
                         .ToArray() ?? Array.Empty<string>();
+                    LastAssetOpenStressResult.MissingEnumMappings = tableEditor.asset.MissingEnumMappings
+                        .OrderBy(value => value, StringComparer.Ordinal)
+                        .ToArray();
+                    LastAssetOpenStressResult.ExportParseFailures = tableEditor.asset.ExportParseFailures.ToArray();
                 }
 
 #if DEBUGTRACING
