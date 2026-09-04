@@ -1268,8 +1268,6 @@ namespace UAssetGUI
 
     public class DirectoryTreeItem
     {
-        private const string LatestRetocFallbackVersion = "UE5_7";
-
         public FileContainerForm ParentForm;
         public string Name;
         public string FullPath;
@@ -1346,9 +1344,12 @@ namespace UAssetGUI
                     }
                     break;
                 case InteropType.Retoc:
+                    var selectedVersion = (RetocEngineVersion)ParentForm.BaseForm.ParsingVersion;
+                    if (!Enum.IsDefined(typeof(RetocEngineVersion), selectedVersion))
+                        throw new InvalidOperationException("Select an explicit engine version before extracting an IoStore asset.");
                     string targetPath = FullPath.Substring(Prefix?.Length ?? 0);
                     string origPathPrefix = Path.Combine(FileContainerForm.RetocTempPath, "RetocFiles");
-                    bool retocSuccess = FileContainerForm.SendCommandToRetoc($"{FileContainerForm.RetocExtraCommands ?? string.Empty} to-legacy --version {LatestRetocFallbackVersion} --filter \"{targetPath}\" \"{Path.GetDirectoryName(ParentForm.CurrentContainerPath)}\" \"{origPathPrefix}\"", out _, out _);
+                    bool retocSuccess = FileContainerForm.SendCommandToRetoc($"{FileContainerForm.RetocExtraCommands ?? string.Empty} to-legacy --version {selectedVersion} --filter \"{targetPath}\" \"{Path.GetDirectoryName(ParentForm.CurrentContainerPath)}\" \"{origPathPrefix}\"", out _, out _);
                     if (!retocSuccess) return null;
 
                     string origPath1 = Path.Combine(origPathPrefix, targetPath);

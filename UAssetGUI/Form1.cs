@@ -1209,6 +1209,9 @@ namespace UAssetGUI
                             MessageBox.Show(string.Format(UAGConfig.GetString("Error.FailedToSaveJSONBackup"), ex.Message), DisplayVersion);
                         }
 
+                        // The current GUI selection owns the save contract, even
+                        // when it changed after this binary or JSON was opened.
+                        tableEditor.asset.SetSerializationEngineVersion(ParsingVersion);
                         tableEditor.asset.Write(path);
                         SetUnsavedChanges(false);
                         tableEditor.Load();

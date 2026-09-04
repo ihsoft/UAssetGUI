@@ -163,7 +163,8 @@
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </EmbeddedResource>
     <EmbeddedResource Include="NOTICE.md" />
-    <EmbeddedResource Include="retoc.exe.gz" />
+    <EmbeddedResource Include="retoc.exe.gz" Condition="'$(RetocResource)' == ''" />
+    <EmbeddedResource Include="$(RetocResource)" Condition="'$(RetocResource)' != ''" LogicalName="UAssetGUI.retoc.exe.gz" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\UAssetAPI\UAssetAPI\UAssetAPI.csproj" />

@@ -204,7 +204,7 @@ namespace UAssetGUI
                             string jsonSerializedAsset = new UAsset(args[2], selectedVer, selectedMappings).SerializeJson(Newtonsoft.Json.Formatting.Indented);
                             File.WriteAllText(args[3], jsonSerializedAsset);
                             return;
-                        // fromjson <source> <destination> [mappings name]
+                        // fromjson <source> <destination> [mappings name/path] [engine version]
                         // UAssetGUI fromjson B.json A.umap Outriders
                         case "fromjson":
                             UAGConfig.LoadMappings();
@@ -235,6 +235,15 @@ namespace UAssetGUI
 
                             if (jsonDeserializedAsset != null)
                             {
+                                if (args.Count >= 6)
+                                {
+                                    string versionName = args[5].Contains('.')
+                                        ? "VER_UE" + args[5].Replace('.', '_') : args[5];
+                                    if (!Enum.TryParse(versionName, out EngineVersion jsonEngineVersion) ||
+                                        !Enum.IsDefined(typeof(EngineVersion), jsonEngineVersion))
+                                        throw new ArgumentException("Invalid fromjson engine version: " + args[5]);
+                                    jsonDeserializedAsset.SetSerializationEngineVersion(jsonEngineVersion);
+                                }
                                 jsonDeserializedAsset.Mappings = selectedMappings;
                                 jsonDeserializedAsset.FilePath = args[2];
                                 jsonDeserializedAsset.Write(args[3]);
